@@ -110,18 +110,27 @@ fn copy_with_progress(
     dest: &mut File,
     pb: &ProgressBar,
 ) -> Result<()> {
-    let mut buffer = vec![0u8; 4 * 1024 * 1024];
+    let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
+    let mut written: u64 = 0;
     loop {
         let bytes_read = source.read(&mut buffer)
             .context("Failed to read from source")?;
-        
+
         if bytes_read == 0 {
             break;
         }
 
         dest.write_all(&buffer[..bytes_read])
             .context("Failed to write to destination")?;
+
+        written += bytes_read as u64;
         pb.inc(bytes_read as u64);
+
+        // Sync data every 10MB
+        if written >= 10 * 1024 * 1024 {
+            dest.sync_data().context("Failed to sync data")?;
+            written = 0;
+        }
     }
     Ok(())
 }
@@ -143,7 +152,7 @@ fn calculate_device_sha256(
         .context("Failed to open device for verification")?;
     
     let mut hasher = Sha256::new();
-    let mut buffer = vec![0u8; 4 * 1024 * 1024]; // 4MB buffer
+    let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
     let mut bytes_remaining = length;
 
     while bytes_remaining > 0 {
